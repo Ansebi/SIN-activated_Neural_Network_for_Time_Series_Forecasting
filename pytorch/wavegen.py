@@ -87,7 +87,7 @@ def generate_multiwave(
         amplitude = np.random.randint(-100, 100)
         phase_shift = np.random.randint(-180, 180)
         if not variation:
-            waves[i] = amplitude * np.sin(frequency * X + phase_shift)
+            waves[i] = amplitude * np.sin(frequency * x + phase_shift)
         else:
             waves[i] = amplitude * (x ** amplitude_change_power) * np.sin(x ** beta * frequency + phase_shift)
     y = np.sum(list(waves.values()), axis=0)
