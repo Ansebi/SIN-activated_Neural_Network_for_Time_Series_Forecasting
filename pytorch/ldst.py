@@ -27,7 +27,7 @@ class SineNN(torch.nn.Module):
         self.min_frequency = params['min_frequency']
         self.max_frequency = params['max_frequency']
         self.amplitude = torch.nn.Parameter(params['amplitude'])
-        self.frequency = torch.nn.Parameter((self.min_frequency + self.max_frequency) / 2)
+        self.frequency = torch.nn.Parameter(params['min_frequency'])
         self.phase = torch.nn.Parameter(params['phase'])
 
     def forward(self, x):
@@ -147,12 +147,12 @@ def get_init_sin_params(
         assert rolling_window % 2, 'Window must be odd'
         y_hornorm_rolling = rolling_mean_centered_unbiased(y_hornorm, rolling_window)
     else:
-        y_hornorm_rolling = y_hornorm    
+        y_hornorm_rolling = y_hornorm
     n = y_hornorm.numel()
     intersections = find_intersections(y_hornorm_rolling - y_hornorm_rolling.mean(), 0)
     if wavelen == 'auto':
         frequency = torch.pi / get_max_gap(intersections, n)
-        max_frequency = torch.pi / get_median_gap(intersections)
+        max_frequency = torch.pi / get_median_gap(intersections)        
     else:
         frequency = torch.tensor(2 * torch.pi / wavelen, device=device)
         max_frequency = torch.tensor(2 * torch.pi / n, device=device)
@@ -197,15 +197,15 @@ def train_sinenn(
     learning_rate: float = 0.01    
 ):
     history = []
-    # y_hat = sinenn(x)
-    # density_loss = compute_density_loss(y_hat, sinwave_params)
+    y_hat = sinenn(x)
+    density_loss = compute_density_loss(y_hat, sinwave_params)
     for iteration in tqdm.tqdm(range(iterations)):
         optimizer = torch.optim.Adam(sinenn.parameters(), lr=learning_rate)
         freeze_parameters(sinenn, whitelist=['phase'])
         for step in range(steps_phase):
             optimizer.zero_grad()
             y_hat = sinenn(x)
-            loss = torch.mean((y_hat - y) ** 2) #+ density_loss
+            loss = torch.mean((y_hat - y) ** 2) + density_loss
             loss.backward()
             optimizer.step()
             history.append(loss)
@@ -226,7 +226,7 @@ def train_sinenn(
     for step in range(steps_amplitude):
         optimizer.zero_grad()
         y_hat = sinenn(x)
-        loss = torch.mean((y_hat - y) ** 2) #+ density_loss
+        loss = torch.mean((y_hat - y) ** 2) + density_loss
         loss.backward()
         optimizer.step()
         history.append(loss)
