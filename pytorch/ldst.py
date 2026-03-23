@@ -34,7 +34,7 @@ class SineNN(torch.nn.Module):
         self.frequency_bound = torch.clamp(
             self.frequency,
             self.min_frequency * (1 - self.frequency_allowance),
-            self.max_frequency * (1 + self.frequency_allowance)
+            self.max_frequency
         )
         self.amplitude_bound = torch.clamp(
             self.amplitude,
@@ -155,7 +155,7 @@ def get_init_sin_params(
         max_frequency = torch.pi / get_median_gap(intersections)        
     else:
         frequency = torch.tensor(2 * torch.pi / wavelen, device=device)
-        max_frequency = torch.tensor(2 * torch.pi / n, device=device)
+        max_frequency = 2 * frequency
     phase = frequency * intersections[0]
     x_angular = frequency * x
     pred = torch.sin(x_angular - phase)
@@ -188,6 +188,7 @@ def compute_density_loss(sin_wave, sinwave_params):
     return density_loss
 
 
+    
 def train_sinenn(
     sinenn, x, y, sinwave_params: dict,
     steps_phase: int = 50,
@@ -197,15 +198,13 @@ def train_sinenn(
     learning_rate: float = 0.01    
 ):
     history = []
-    y_hat = sinenn(x)
-    density_loss = compute_density_loss(y_hat, sinwave_params)
     for iteration in tqdm.tqdm(range(iterations)):
         optimizer = torch.optim.Adam(sinenn.parameters(), lr=learning_rate)
         freeze_parameters(sinenn, whitelist=['phase'])
         for step in range(steps_phase):
             optimizer.zero_grad()
             y_hat = sinenn(x)
-            loss = torch.mean((y_hat - y) ** 2) + density_loss
+            loss = torch.mean((y_hat - y) ** 2)
             loss.backward()
             optimizer.step()
             history.append(loss)
@@ -226,7 +225,7 @@ def train_sinenn(
     for step in range(steps_amplitude):
         optimizer.zero_grad()
         y_hat = sinenn(x)
-        loss = torch.mean((y_hat - y) ** 2) + density_loss
+        loss = torch.mean((y_hat - y) ** 2)
         loss.backward()
         optimizer.step()
         history.append(loss)
@@ -253,6 +252,11 @@ def waves_residual_split(x_tensor, y_tensor, num_waves, rolling_window, learning
     for wave_number in range(num_waves):
         min_, max_ = y_hornorm.min(), y_hornorm.max()
         y_hornorm = normalize_torch(y_hornorm, min_, max_) - 0.5
+        if plot:
+            plt.figure(figsize=(30, 1))
+            plt.plot(x_tensor.cpu(), y_hornorm.cpu())
+        if wavelen != 'auto':
+            wavelen /= wave_number + 1
         sinwave_params = get_init_sin_params(x_tensor, y_hornorm, rolling_window=rolling_window, wavelen=wavelen)
         sinenn = SineNN(sinwave_params).to(device)
         if plot:
@@ -273,8 +277,6 @@ def waves_residual_split(x_tensor, y_tensor, num_waves, rolling_window, learning
             }
         )
         if plot:
-            plt.figure(figsize=(30, 1))
-            plt.plot(x_tensor.cpu(), y_hornorm.cpu())
             plt.plot(x_tensor.cpu(), sin_wave_untrained.detach().cpu())
             plt.plot(x_tensor.cpu(), sin_wave.detach().cpu())
             loss_diff = 100 * (loss_trained - loss_untrained) / np.abs(loss_untrained)
